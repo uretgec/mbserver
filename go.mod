@@ -1,4 +1,4 @@
-module mbserver
+module github.com/uretgec/mbserver
 
 go 1.22.6
 
