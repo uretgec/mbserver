@@ -34,7 +34,7 @@ SkipFrameError:
 		default:
 		}
 
-		buffer := make([]byte, 512)
+		buffer := make([]byte, 513)
 
 		bytesRead, err := port.Read(buffer)
 		if err != nil {

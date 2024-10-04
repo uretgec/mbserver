@@ -1,7 +1,8 @@
 package mbserver
 
 import (
-	"encoding/binary"
+	"bytes"
+	"encoding/hex"
 	"fmt"
 )
 
@@ -25,18 +26,28 @@ func NewASCIIFrame(packet []byte) (*ASCIIFrame, error) {
 
 	// LRC
 	pLen := len(packet)
-	dataEnd := pLen - 2
-	lrcExpect := packet[dataEnd:]
-	lrcCalc := lrcModbus(packet[1:dataEnd]...)
-	if lrcExpect[1] != lrcCalc {
+	data := packet[1 : pLen-2]
+
+	// packet frame decode
+	decodeData := make([]byte, len(data)/2)
+	length, err := hex.Decode(decodeData, data)
+	if err != nil {
+		err := fmt.Errorf("modbus: response data wrong")
+		return nil, err
+	}
+
+	// lrc caclulate
+	lrcExpect := decodeData[length-1]
+	lrcCalc := lrcModbus(decodeData[:length-1]...) // remove last byte (lrc)
+	if lrcExpect != lrcCalc {
 		err := fmt.Errorf("modbus: response lrc '%v' does not match expected '%v'", lrcCalc, lrcExpect)
 		return nil, err
 	}
 
 	frame := &ASCIIFrame{
-		Address:  uint8(packet[1]),
-		Function: uint8(packet[2]),
-		Data:     packet[2 : pLen-2],
+		Address:  uint8(data[0]),
+		Function: uint8(data[1]),
+		Data:     decodeData[2 : pLen-2],
 	}
 
 	return frame, nil
@@ -50,21 +61,38 @@ func (frame *ASCIIFrame) Copy() Framer {
 
 // Bytes returns the Modbus byte stream based on the ASCIIFrame fields
 func (frame *ASCIIFrame) Bytes() []byte {
-	bytes := make([]byte, 2)
+	byts := make([]byte, 2)
 
-	bytes[0] = frame.Address
-	bytes[1] = frame.Function
-	bytes = append(bytes, frame.Data...)
+	byts[0] = frame.Address
+	byts[1] = frame.Function
+	byts = append(byts, frame.Data...)
 
-	// Calculate the CRC.
-	pLen := len(bytes)
-	crc := crcModbus(bytes[0:pLen])
+	// Calculate the LRC. 1 byte
+	pLen := len(byts)
+	lrc := lrcModbus(byts[:pLen]...)
 
-	// Add the CRC.
-	bytes = append(bytes, []byte{0, 0}...)
-	binary.LittleEndian.PutUint16(bytes[pLen:pLen+2], crc)
+	// Add the LRC.
+	byts[pLen] = lrc
 
-	return bytes
+	pLen += 1
+
+	asciiTotalBytes := pLen * 2
+
+	ascii_packet := make([]byte, asciiTotalBytes+3) // +3 = :, CR + LF
+	_ = hex.Encode(ascii_packet[1:], byts[:pLen])
+
+	asciiTotalBytes += 1
+
+	// start ascii
+	ascii_packet[0] = 0x3a // 1 byte (:)
+
+	// end line: CR LF
+	ascii_packet[asciiTotalBytes] = 0x0d   // CR (\r)
+	ascii_packet[asciiTotalBytes+1] = 0x0a // LF (\n)
+
+	asciiTotalBytes += 2
+
+	return bytes.ToUpper(ascii_packet[:asciiTotalBytes])
 }
 
 // GetFunction returns the Modbus function code.
