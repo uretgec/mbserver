@@ -45,9 +45,9 @@ func NewASCIIFrame(packet []byte) (*ASCIIFrame, error) {
 	}
 
 	frame := &ASCIIFrame{
-		Address:  uint8(data[0]),
-		Function: uint8(data[1]),
-		Data:     decodeData[2 : pLen-2],
+		Address:  uint8(decodeData[0]),
+		Function: uint8(decodeData[1]),
+		Data:     decodeData[2 : length-1],
 	}
 
 	return frame, nil
