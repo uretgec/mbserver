@@ -72,7 +72,7 @@ func (frame *ASCIIFrame) Bytes() []byte {
 	lrc := lrcModbus(byts[:pLen]...)
 
 	// Add the LRC.
-	byts[pLen] = lrc
+	byts = append(byts, lrc)
 
 	pLen += 1
 
